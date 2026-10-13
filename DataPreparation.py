@@ -134,3 +134,86 @@ data_view.columns = pd.MultiIndex.from_tuples(
     [(col, labels.get(col, "")) for col in data_df.columns]
 )
 print(data_view.head())
+
+# %% Kontrola etykiet
+print(list(labels.items())[:10])
+
+print("Kolumny bez etykiet:")
+print([col for col in data_df.columns if col not in labels])
+
+# Naprawa etykiet
+# %% Mapowanie nazw XML na etykiety z TXT
+
+xml_to_legend = {
+    "rating": "STD/SRTNG",
+    "rapid_rating": "RPD/RRTNG",
+    "blitz_rating": "BLZ/BRTNG",
+    "games": "SGM",
+    "rapid_games": "RGM",
+    "blitz_games": "BGM",
+    "k": "SK",
+    "rapid_k": "RK",
+    "blitz_k": "BK",
+    "birthday": "B-day/BORN"
+}
+# %% Pozostałe etykiety
+extra_labels = {
+    "fideid": "FIDE player ID",
+    "name": "Player name",
+    "country": "Federation",
+    "sex": "Sex",
+    "title": "FIDE title",
+    "w_title": "Women's FIDE title",
+    "o_title": "Other title",
+    "foa_title": "FIDE Online Arena title",
+    "flag": "Player status flag"
+}
+# %% Dodanie opisów pod nazwami kolumn
+column_labels = {
+    **extra_labels,
+    **{
+        col: labels[legend_name]
+        for col, legend_name in xml_to_legend.items()
+        if legend_name in labels
+    }
+}
+data_view = data_df.copy(deep=False)
+data_view.columns = pd.MultiIndex.from_tuples(
+    [
+        (col, column_labels.get(col, "Brak opisu"))
+        for col in data_df.columns
+    ]
+)
+print(data_view.head())
+# %% Kontrola opisów
+print("Liczba zmiennych:", len(data_df.columns))
+print("Liczba dopasowanych etykiet:", len(column_labels))
+
+print("Zmienne bez opisu:")
+print([col for col in data_df.columns if col not in column_labels])
+
+
+#############################
+# Sprawdzenie jakości danych do czyszczenia
+# %%
+print(data_df.dtypes)
+print(data_df.isna().sum())
+print(data_df.isnull().sum())
+print(data_df.shape)
+print(data_df.describe())
+
+
+## Konwersja danych
+# %% Konwersja typów zmiennych
+
+numeric_cols = [
+    "rating", "games", "k",
+    "rapid_rating", "rapid_games", "rapid_k",
+    "blitz_rating", "blitz_games", "blitz_k",
+    "birthday"
+]
+
+data_df[numeric_cols] = data_df[numeric_cols].apply(
+    pd.to_numeric, errors="coerce"
+).astype("Int32")
+print(data_df.dtypes)
