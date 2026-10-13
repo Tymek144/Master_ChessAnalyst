@@ -1,1 +1,136 @@
 import pandas as pd
+from pathlib import Path
+import xml.etree.ElementTree as ET
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+# %% Przydatne ustawienia
+# Wyświetl wszystkie kolumny
+pd.set_option("display.max_columns", None)
+
+# Wyświetl wszystkie wiersze
+#pd.set_option("display.max_rows", None)
+
+# Nie skracaj zawartości komórek
+pd.set_option("display.max_colwidth", None)
+
+# Nie ograniczaj szerokości tabeli
+pd.set_option("display.width", None)
+
+
+# %% Wczytanie danych
+#to nie działa bo xml jest za duzy
+#data_df = pd.read_xml("data/players_list_xml_foa.xml")
+#print(data_df.head())
+
+
+# %% Wczytanie czesci danych xml
+#To działa dla 1000 wierszy
+players = []
+context = ET.iterparse("data/players_list_xml_foa.xml", events=("start", "end"))
+_, root = next(context)
+for event, elem in context:
+    if event == "end" and elem.tag == "player":
+        players.append({
+            child.tag: child.text
+            for child in elem
+        })
+        root.clear()
+        if len(players) == 1000:
+            break
+data_df = pd.DataFrame(players)
+print(data_df.head())
+print(data_df.shape)
+print(data_df.head().T)
+
+
+# %% Przetworzenie do pliku typu Parquet
+
+# Ścieżki
+xml_file = "data/players_list_xml_foa.xml"
+parquet_file = "data/players.parquet"
+
+# Konwersja XML do Parquet
+batch_size = 10000
+batch = []
+writer = None
+columns = None
+schema = None
+count = 0
+
+context = ET.iterparse(xml_file, events=("start", "end"))
+_, root = next(context)
+
+try:
+    for event, elem in context:
+        if event == "end" and elem.tag == "player":
+            player = {
+                child.tag: child.text
+                for child in elem
+            }
+            if writer is None:
+                columns = list(player.keys())
+                schema = pa.schema([
+                    (col, pa.string()) for col in columns
+                ])
+                writer = pq.ParquetWriter(
+                    parquet_file,
+                    schema=schema,
+                    compression="zstd"
+                )
+            batch.append(player)
+            count += 1
+            elem.clear()
+            root.clear()
+            if len(batch) >= batch_size:
+                table = pa.Table.from_pydict(
+                    {
+                        col: [row.get(col) for row in batch]
+                        for col in columns
+                    },
+                    schema=schema
+                )
+                writer.write_table(table)
+                batch.clear()
+                print(f"Przetworzono: {count} zawodników")
+    # Zapis ostatniej, niepełnej partii
+    if batch and writer is not None:
+        table = pa.Table.from_pydict(
+            {
+                col: [row.get(col) for row in batch]
+                for col in columns
+            },
+            schema=schema
+        )
+        writer.write_table(table)
+finally:
+    if writer is not None:
+        writer.close()
+print(f"Zakończono. Łącznie zawodników: {count}")
+
+
+# %% Wczytanie etykiet
+
+with open("data/Legend.txt", encoding="utf-8") as f:
+    labels = dict(
+        line.strip().split(" - ", 1)
+        for line in f
+        if " - " in line
+    )
+print(labels)
+
+
+# %% Wczytanie danych z Parquet
+
+data_df = pd.read_parquet("data/players.parquet")
+print(data_df.head())
+print(data_df.shape)
+
+
+# %% dodanie etykiet do danych
+
+data_view = data_df.copy()
+data_view.columns = pd.MultiIndex.from_tuples(
+    [(col, labels.get(col, "")) for col in data_df.columns]
+)
+print(data_view.head())

@@ -10,3 +10,10 @@ __pycache__/
 
 # Secrets
 .env
+
+data/*.xml
+data/*.parquet
+
+data/players_list_foa.txt
+data/players_list_xml_foa.xml
+data/players.parquet
